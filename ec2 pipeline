@@ -1,0 +1,86 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_DEFAULT_REGION = 'ap-south-1'
+    }
+
+    stages {
+        stage('Run with AWS Credentials') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials-id']]) {
+                    script {
+                        // Debugging the credentials by printing them (remove these after testing)
+                        sh 'echo "AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"'
+                        sh 'echo "AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY"'
+                        
+                        writeFile file: 'terraform/ec2.tf', text: """
+provider "aws" {
+  region     = "${env.AWS_DEFAULT_REGION}"
+  access_key = "${env.AWS_ACCESS_KEY_ID}"
+  secret_key = "${env.AWS_SECRET_ACCESS_KEY}"
+}
+
+resource "aws_instance" "example" {
+  ami           = "ami-0d9462a653c34dab7"  
+  instance_type = "t2.micro"               
+
+  tags = {
+    Name = "TerraformExample"
+  }
+}
+"""
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform init'
+                }
+            }
+        }
+
+        stage('Terraform Format') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform fmt'
+                }
+            }
+        }
+
+        stage('Terraform Format Check') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform fmt -check'
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform validate'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform plan -out=tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+    }
+}
